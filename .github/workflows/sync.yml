@@ -1,0 +1,45 @@
+name: Sync Fork
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+env:
+  UPSTREAM_REPO: qist/tvbox
+  UPSTREAM_BRANCH: master
+  TARGET_BRANCH: master
+permissions:
+  contents: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Backup sync.yml
+        run: |
+          mkdir -p /tmp/backup
+          cp -f .github/workflows/sync.yml /tmp/backup/sync.yml || true
+
+      - name: Sync upstream via pure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/${UPSTREAM_REPO}.git
+          git fetch upstream
+          git checkout ${TARGET_BRANCH}
+          git reset --hard upstream/${UPSTREAM_BRANCH}
+
+      - name: Restore sync.yml
+        run: |
+          mkdir -p .github/workflows
+          cp -f /tmp/backup/sync.yml .github/workflows/sync.yml
+          git add .github/workflows/sync.yml
+          # 如果这个文件和上游不一样，生成提交；如果没变，git push 不会产生新commit
+          git commit -m "chore: preserve sync.yml" --allow-empty
+
+      - name: Push to fork
+        run: |
+          git push origin ${TARGET_BRANCH} --force
